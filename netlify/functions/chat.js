@@ -1,5 +1,3 @@
-const Anthropic = require("@anthropic-ai/sdk");
-
 exports.handler = async function(event, context) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -12,34 +10,36 @@ exports.handler = async function(event, context) {
     return { statusCode: 200, headers, body: '' };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
-  }
-
   try {
     const body = JSON.parse(event.body);
 
-    // Netlify AI Gateway가 자동으로 API 키를 주입 — 별도 설정 불필요!
-    const client = new Anthropic();
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 
-    const response = await client.messages.create({
-      model: body.model || 'claude-sonnet-4-20250514',
-      max_tokens: body.max_tokens || 1000,
-      system: body.system,
-      messages: body.messages
+    const response = await fetch(`${baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: body.model || 'claude-sonnet-4-20250514',
+        max_tokens: body.max_tokens || 1000,
+        system: body.system,
+        messages: body.messages
+      })
     });
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify(response)
-    };
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { statusCode: response.status, headers, body: JSON.stringify({ error: data.error?.message || 'API Error' }) };
+    }
+
+    return { statusCode: 200, headers, body: JSON.stringify(data) };
   } catch (err) {
     console.error('Error:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: err.message || '서버 오류가 발생했습니다.' })
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
